@@ -1,0 +1,509 @@
+type: edu
+custom_name: stage4
+files:
+- name: src/life/Main.java
+  visible: true
+  text: |
+    package life;
+
+    public class Main {
+        public static void main(String[] args) {
+            System.out.println("Hello World!");
+        }
+    }
+  learner_created: false
+- name: test/GameOfLifeTest.java
+  visible: false
+  text: |2
+
+    import common.GameOfLifeStage4Test;
+
+    public class GameOfLifeTest extends GameOfLifeStage4Test {
+
+    }
+  learner_created: false
+- name: test/common/CheckResultUtil.kt
+  visible: false
+  text: |
+    package common
+
+
+    import org.hyperskill.hstest.v6.testcase.CheckResult
+
+    operator fun CheckResult.component1(): Boolean = isCorrect
+    operator fun CheckResult.component2(): String? = feedback
+
+    fun fail(message: String) = CheckResult(false, message)
+  learner_created: false
+- name: test/common/ClueWithChecker.kt
+  visible: false
+  text: |
+    package common
+
+
+    import org.hyperskill.hstest.v6.testcase.CheckResult
+    import org.hyperskill.hstest.v6.testcase.TestCase
+
+    sealed class ClueWithChecker(val input: String) {
+        fun toTestCase(): TestCase<ClueWithChecker> {
+            return TestCase<ClueWithChecker>().setInput(input).setAttach(this)
+        }
+    }
+
+    class ClueWithPredefinedFeedbackChecker(
+            val predefinedFeedback: String,
+            input: String,
+            val checker: (String) -> Boolean
+    ) : ClueWithChecker(input)
+
+    class ClueWithDynamicFeedbackChecker(
+            input: String,
+            val checker: (String) -> CheckResult
+    ) : ClueWithChecker(input)
+
+    fun createPredefinedFeedbackTest(
+            feedback: String,
+            input: String = "",
+            checker: (String) -> Boolean
+    ): TestCase<ClueWithChecker> {
+        return ClueWithPredefinedFeedbackChecker(
+                predefinedFeedback = feedback,
+                input = input,
+                checker = checker
+        ).toTestCase()
+    }
+
+    fun createDynamicFeedbackTest(input: String = "", checker: (String) -> CheckResult): TestCase<ClueWithChecker> {
+        return ClueWithDynamicFeedbackChecker(
+                input = input,
+                checker = checker
+        ).toTestCase()
+    }
+
+    fun checkClueWithCheckerTest(reply: String, clue: ClueWithChecker): CheckResult {
+        return try {
+            when (clue) {
+                is ClueWithDynamicFeedbackChecker -> clue.checker(reply)
+                is ClueWithPredefinedFeedbackChecker -> CheckResult(clue.checker(reply), clue.predefinedFeedback)
+            }
+        } catch (e: AssertionError) {
+            if (clue is ClueWithPredefinedFeedbackChecker) {
+                fail(clue.predefinedFeedback)
+            } else {
+                CheckResult.FALSE
+            }
+        }
+    }
+  learner_created: false
+- name: test/common/GameOfLifeCommonTest.kt
+  visible: false
+  text: |
+    package common
+
+
+    import org.assertj.swing.fixture.JLabelFixture
+    import org.hyperskill.hstest.v6.testcase.CheckResult
+
+    fun checkLabelForInteger(labelRequirements: ComponentRequirements<JLabelFixture>): CheckResult {
+        val label = labelRequirements.requireExistingComponent()
+
+        val labelDigits = label.text().trim { !it.isDigit() }
+
+        if (labelDigits.toIntOrNull() == null) {
+            return fail("The '${labelRequirements.name}' label doesn't contain an integer.")
+        }
+
+        return CheckResult.TRUE
+    }
+  learner_created: false
+- name: test/common/GameOfLifeStage4Test.kt
+  visible: false
+  text: |
+    package common
+
+
+    import org.assertj.swing.fixture.JLabelFixture
+    import org.hyperskill.hstest.v6.stage.SwingTest
+    import org.hyperskill.hstest.v6.testcase.CheckResult
+    import org.hyperskill.hstest.v6.testcase.TestCase
+    import life.GameOfLife
+
+    abstract class GameOfLifeStage4Test : SwingTest<ClueWithChecker>(GameOfLife()) {
+
+        override fun generate(): List<TestCase<ClueWithChecker>> {
+            val generationLabel = ComponentRequirements("GenerationLabel", isEnabled = true) { window.label(it) }
+            val aliveLabel = ComponentRequirements("AliveLabel", isEnabled = true) { window.label(it) }
+
+            return frameTests(::frame) +
+                    existenceTests(generationLabel, aliveLabel) +
+                    componentsAreEnabledTests(generationLabel, aliveLabel) +
+                    stage4Tests(
+                            generationLabelRequirements = generationLabel,
+                            aliveLabelRequirements = aliveLabel
+                    )
+        }
+
+        override fun check(reply: String, clue: ClueWithChecker): CheckResult {
+            return checkClueWithCheckerTest(reply = reply, clue = clue)
+        }
+    }
+
+    fun stage4Tests(
+            generationLabelRequirements: ComponentRequirements<JLabelFixture>,
+            aliveLabelRequirements: ComponentRequirements<JLabelFixture>
+    ): List<TestCase<ClueWithChecker>> {
+        return listOf(
+                createDynamicFeedbackTest {
+                    with(checkLabelForInteger(generationLabelRequirements)) {
+                        if (!this.isCorrect) {
+                            return@createDynamicFeedbackTest this
+                        }
+                    }
+                    with(checkLabelForInteger(aliveLabelRequirements)) {
+                        if (!this.isCorrect) {
+                            return@createDynamicFeedbackTest this
+                        }
+                    }
+
+                    return@createDynamicFeedbackTest CheckResult.TRUE
+                }
+        )
+    }
+  learner_created: false
+- name: test/common/UiTestsGenerators.kt
+  visible: false
+  text: |
+    package common
+
+
+    import org.assertj.swing.fixture.AbstractJComponentFixture
+    import org.hyperskill.hstest.v6.stage.SwingTest
+    import org.hyperskill.hstest.v6.testcase.TestCase
+    import javax.swing.JFrame
+
+    fun frameTests(frameGetter: () -> JFrame): List<TestCase<ClueWithChecker>> {
+        return listOf(
+                createPredefinedFeedbackTest("Window is not visible") { frameGetter().isVisible }
+        )
+    }
+
+    class ComponentRequirements<ComponentType : AbstractJComponentFixture<*, *, *>>(
+            val name: String,
+            val isEnabled: Boolean,
+            private val componentFinder: (String) -> ComponentType?
+    ) {
+        val suitableComponent: ComponentType? by lazy { componentFinder(name) }
+    }
+
+    fun existenceTests(vararg components: ComponentRequirements<*>): List<TestCase<ClueWithChecker>> {
+        fun generateExistenceTest(requirements: ComponentRequirements<*>): TestCase<ClueWithChecker> {
+            return createPredefinedFeedbackTest("No suitable component with name '${requirements.name}' is found") {
+                SwingTest.checkExistence { requirements.suitableComponent }
+            }
+        }
+
+        return components.map(::generateExistenceTest)
+    }
+
+    fun componentsAreEnabledTests(vararg components: ComponentRequirements<*>): List<TestCase<ClueWithChecker>> {
+        fun generateIsEnabledTest(requirements: ComponentRequirements<*>): TestCase<ClueWithChecker> {
+            val (desiredState, stateChecker) = if (requirements.isEnabled) {
+                "enabled" to { requirements.requireExistingComponent().isEnabled }
+            } else {
+                "disabled" to { !requirements.requireExistingComponent().isEnabled }
+            }
+
+            return createPredefinedFeedbackTest("The '${requirements.name}' component should be $desiredState") {
+                stateChecker()
+            }
+
+        }
+
+        return components.map(::generateIsEnabledTest)
+    }
+
+    fun <ComponentType : AbstractJComponentFixture<*, *, *>>
+            ComponentRequirements<ComponentType>.requireExistingComponent(): ComponentType {
+        return requireNotNull(this.suitableComponent) {
+            "Must check for the '${this.name}' component existence before this test"
+        }
+    }
+  learner_created: false
+- name: src/life/GameLogic.java
+  visible: true
+  text: |
+    package life;
+
+    import java.util.Random;
+
+    public class GameLogic {
+
+        private int size;
+        private int generations;
+
+        private String [][] array;
+        private String [][] evolvedUniverse;
+
+        public GameLogic() {
+            size = 0;
+            generations = 0;
+        }
+
+        public void setInput(int size) {
+            this.size = size;
+            this.generations = 1;
+            array = new String[size][size];
+            evolvedUniverse = new String[size][size];
+        }
+
+        public void initGameBoard(){
+            evolvedUniverse = initializeUniverse();
+
+            initState();
+        }
+
+        public void play() {
+            if (generations==1) {
+                System.out.println("Generation #" + generations);
+                System.out.println("alive: " + countAliveCell(array));
+                printUniverse(array);
+                generations+=1;
+            }
+            else if (generations>1) {
+                System.out.println("Generation #" + generations);
+                generateCell(array, evolvedUniverse);
+                copy2DArr(array, evolvedUniverse);
+                System.out.println("alive: " + countAliveCell(array));
+                printUniverse(array);
+                generations += 1;
+            }
+        }
+
+        public static void copy2DArr(String [][] array, String [][] evolvedUniverse){
+            for (int i = 0; i<evolvedUniverse.length;i++){
+                for (int j = 0; j<evolvedUniverse.length;j++){
+                    array[i][j] = evolvedUniverse[i][j];
+                }
+            }
+        }
+
+        public int countAliveCell(String [][] array){
+            int counter = 0;
+            for (int i = 0; i<array.length;i++){
+                for (int j = 0; j<array.length;j++){
+                    if (array[i][j].equals("0")){
+                        counter+=1;
+                    }
+                }
+            }
+            return counter;
+        }
+
+        public String [][] initializeUniverse() {
+            String [] [] emptyArr = new String[size][size];
+            for (int i = 0; i<emptyArr.length;i++){
+                for (int j = 0; j<emptyArr.length;j++){
+                    emptyArr[i][j] = " ";
+                }
+            }
+            return emptyArr;
+        }
+
+        public void printUniverse(String[][] evolvedUniverse) {
+            for (int i = 0; i<evolvedUniverse.length;i++) {
+                for (int j = 0; j<evolvedUniverse.length;j++) {
+                    System.out.print(evolvedUniverse[i][j]);
+                }
+                System.out.println();
+            }
+        }
+
+        public void initState() {
+            Random random = new Random();
+            boolean randomBool = random.nextBoolean();
+
+            for (int i = 0; i < array.length; i++) {
+                for (int j = 0; j < array.length; j++) {
+                    if (randomBool) {
+                        array[i][j] = "0";
+                    }
+                    else {
+                        array[i][j] = " ";
+                    }
+                    randomBool = random.nextBoolean();
+                }
+            }
+        }
+
+        public void generateCell(String[][] array, String[][] evolveUniverse) {
+            for (int i = 0; i < array.length; i++) {
+                for (int j = 0; j < array.length; j++) {
+                    int liveCell = countLiveCell(array, i, j);
+                    if (array[i][j].equals(" ")){
+                        if (liveCell == 3){
+                            evolveUniverse[i][j] = "0";
+                        }
+                    }
+                    else if (array[i][j].trim().equals("0")){
+                        if (liveCell<2){
+                            evolveUniverse[i][j] = " ";
+                        }
+                        else if (liveCell>=2 && liveCell<=3){
+                            evolveUniverse[i][j] = "0";
+                        }
+                        else if (liveCell>3){
+                            evolveUniverse[i][j] = " ";
+                        }
+                    }
+                }
+            }
+        }
+
+        public int countLiveCell(String[][] array, int row, int col) {
+            int countRow = 0;
+            int countCol = 0;
+            int countDiagonal = 0;
+
+            int[] positions = new int[2];
+
+            positions = horizontalNeighbors(array, col);
+            for (int i = 0; i < positions.length; i++) {
+                if (array[row][positions[i]].equals("0")) {
+                    countCol+=1;
+                }
+            }
+
+            positions = verticalNeighbors(array, row);
+            for (int i = 0; i < positions.length; i++) {
+                if (array[positions[i]][col].equals("0")) {
+                    countRow+=1;
+                }
+            }
+
+
+            positions = upperDiagonalNeighbors(array, row, col);
+            if (array[positions[0]][positions[1]].equals("0")){
+                countDiagonal+=1;
+            }
+            if (array[positions[0]][positions[2]].equals("0")){
+                countDiagonal+=1;
+            }
+
+            positions = lowerDiagonalNeighbors(array, row, col);
+            if (array[positions[0]][positions[1]].equals("0")){
+                countDiagonal+=1;
+            }
+            if (array[positions[0]][positions[2]].equals("0")){
+                countDiagonal+=1;
+            }
+
+            return countCol+countRow+countDiagonal;
+
+        }
+
+        public int[] horizontalNeighbors(String[][] array, int col) {
+            int largerCol = col + 1;
+            int smallerCol = col - 1;
+            if (col + 1 > array.length - 1) {
+                largerCol = array.length - (col + 1);
+            }
+            if (col - 1 < 0) {
+                smallerCol = array.length + (col - 1);
+            }
+
+            int[] horizontalPos = new int[2];
+            horizontalPos[0] = largerCol;
+            horizontalPos[1] = smallerCol;
+
+            return horizontalPos;
+        }
+
+        public int[] verticalNeighbors(String[][] array, int row) {
+            int largerRow = row + 1;
+            int smallerRow = row - 1;
+            if (row + 1 > array.length - 1) {
+                largerRow = array.length - (row + 1);
+            }
+            if (row - 1 < 0) {
+                smallerRow = array.length + (row - 1);
+            }
+
+            int[] verticalPos = new int[2];
+            verticalPos[0] = largerRow;
+            verticalPos[1] = smallerRow;
+
+            return verticalPos;
+        }
+
+        public int[] upperDiagonalNeighbors(String[][] array, int row, int col) {
+            int upperRow = row-1;
+            int rightCol = col+1;
+            int leftCol = col-1;
+            if (upperRow<0){
+                upperRow = array.length + (upperRow);
+            }
+            if (rightCol>array.length-1){
+                rightCol = 0;
+            }
+            if (leftCol<0){
+                leftCol = array.length +(leftCol);
+            }
+
+            int [] upperDiagonalPos = {upperRow,rightCol,leftCol};
+            return upperDiagonalPos;
+        }
+
+        public int [] lowerDiagonalNeighbors(String [][] array, int row, int col){
+            int lowerRow = row+1;
+            int rightCol = col+1;
+            int leftCol = col-1;
+            if (lowerRow>array.length-1){
+                lowerRow = 0;
+            }
+            if (rightCol>array.length-1){
+                rightCol = 0;
+            }
+            if (leftCol<0){
+                leftCol = array.length +(leftCol);
+            }
+
+            int [] lowerDiagonalPos = {lowerRow,rightCol,leftCol};
+            return lowerDiagonalPos;
+        }
+
+    }
+  learner_created: true
+- name: src/life/Runner.java
+  visible: true
+  text: |
+    package life;
+
+    public class Runner{
+
+        private GameLogic gameLogic;
+
+        public Runner(GameLogic gameLogic) {
+            this.gameLogic = gameLogic;
+        }
+
+        public void playGame() {
+            for (int i = 0;i<11;i++) {
+                gameLogic.play();
+            }
+        }
+
+    }
+  learner_created: true
+- name: src/life/GameOfLife.java
+  visible: true
+  learner_created: true
+- name: src/life/GameField.java
+  visible: true
+  learner_created: true
+feedback_link: https://hyperskill.org/projects/54/stages/298/implement
+status: Solved
+feedback:
+  message: Congratulations! Continue on <a href="https://hyperskill.org/projects/54/stages/298/implement">JetBrains
+    Academy</a>
+  time: Sun, 16 Aug 2020 00:54:48 UTC
+record: 4
